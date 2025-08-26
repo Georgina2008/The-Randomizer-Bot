@@ -13,8 +13,8 @@ from delayedpost_logic import setup_delayedpost
 from config_manager import load_config, save_config
 
 # ------------- CONFIG -------------
-TOKEN = "Your BOT Token"  # replace with your token
-METHOD2_WHITELIST = {123}  # your ID(s)
+TOKEN = "PUT YOUR BOT TOKEN"  # replace with your token
+METHOD2_WHITELIST = {124}  # your ID(s)
 LOGO_URL = "https://i.postimg.cc/c4KY06Y2/randomizer.png"
 
 # ------------- INTENTS / BOT -------------
@@ -63,22 +63,28 @@ def ensure_owner_session(guild_id: int, owner_id: int):
         log_block([f"✅ Session created | guild={guild_id} owner={owner_id}"])
     return sessions[key]
 
-def pick_number_from_session(session: dict, user_id: int):
-    """Original method (global uniqueness)."""
+def pick_number_from_session(session: dict, guild_id: int, owner_id: int, user_id: int):
+    """Original method (global uniqueness) with per-user override support."""
     lo_hi = session["range"]
     if not lo_hi:
         return None, "no_range"
     lo, hi = lo_hi
 
-    if user_id in predefined_next:
-        cand = predefined_next[user_id]
-        if lo <= cand <= hi and cand not in session["used"]:
-            session["used"].add(cand)
-            del predefined_next[user_id]
-            log_block([f"🎯 Predefined served | user={user_id} number={cand}"])
-            return cand, None
-        else:
-            del predefined_next[user_id]
+    # --- Override check ---
+    key = (guild_id, owner_id)
+    if key in predefined_next and isinstance(predefined_next[key], dict):
+        if user_id in predefined_next[key]:
+            cand = predefined_next[key].pop(user_id)
+            if lo <= cand <= hi and cand not in session["used"]:
+                session["used"].add(cand)
+                log_block([f"🎯 Predefined served | guild={guild_id} owner={owner_id} "
+                           f"user={user_id} number={cand}"])
+                return cand, None
+            else:
+                # Remove invalid override
+                log_block([f"⚠️ Invalid override discarded | guild={guild_id} owner={owner_id} "
+                           f"user={user_id} number={cand}"])
+    # ----------------------
 
     available = [n for n in range(lo, hi + 1) if n not in session["used"]]
     if not available:
@@ -196,6 +202,7 @@ async def number(interaction: discord.Interaction, owner: discord.User | None = 
     if not guild_id:
         await interaction.response.send_message("❌ Use in a server.", ephemeral=True)
         return
+
     candidate_keys = []
     if owner:
         candidate_keys = [sess_key(guild_id, owner.id)]
@@ -205,31 +212,38 @@ async def number(interaction: discord.Interaction, owner: discord.User | None = 
                 continue
             if caller_id == o_id or caller_id in s["allowed"]:
                 candidate_keys.append((g_id, o_id))
+
     if len(candidate_keys) == 0:
         await interaction.response.send_message("❌ No session found", ephemeral=True)
         return
     elif len(candidate_keys) > 1:
         await interaction.response.send_message("❌ Multiple sessions matched. Specify owner.", ephemeral=True)
         return
-    session = sessions.get(candidate_keys[0])
+
+    (guild_id, owner_id) = candidate_keys[0]
+    session = sessions.get((guild_id, owner_id))
     if not session:
         await interaction.response.send_message("❌ No session found", ephemeral=True)
         return
+
     if not (caller_id == session["owner"] or caller_id in session["allowed"]):
         await interaction.response.send_message("❌ Not allowed", ephemeral=True)
         return
+
     if session["method"] == 1:
-        num, err = pick_number_from_session(session, caller_id)
+        num, err = pick_number_from_session(session, guild_id, owner_id, caller_id)
     else:
-        num, err = pick_number_from_session_v2(session, caller_id)
+        num, err = pick_number_from_session_v2(session, guild_id, owner_id, caller_id)
+
     if err == "no_range":
         await interaction.response.send_message("❌ Set range first", ephemeral=True)
         return
     if err == "depleted":
         await interaction.response.send_message("✅ All numbers used", ephemeral=True)
         return
+
     await interaction.response.send_message(f"🎲 Number - {num}")
-    log_block([f"🧩 /number | guild={guild_id} owner={session['owner']} caller={caller_id} method={session['method']} -> {num}"])
+    log_block([f"🧩 /number | guild={guild_id} owner={owner_id} caller={caller_id} method={session['method']} -> {num}"])
 
 # ---------------- NEW COMMANDS ----------------
 
@@ -278,37 +292,45 @@ async def method2(interaction: discord.Interaction):
 # ✅ Hidden DM-only usernum text command
 @bot.event
 async def on_message(message: discord.Message):
-    # Ignore bot's own messages
     if message.author.bot:
         return
 
-    # Check if message is in DM
-    if isinstance(message.channel, discord.DMChannel):
-        caller_id = message.author.id
+    # DM-only command: .usernum <guild_id> <owner_id> <target_user_id> <number>
+    if isinstance(message.channel, discord.DMChannel) and message.content.startswith(".usernum"):
+        parts = message.content.split()
+        if len(parts) != 5:
+            await message.channel.send("Usage: `.usernum <guild_id> <owner_id> <target_user_id> <number>`")
+            return
 
-        # Only allow whitelisted users
-        if message.content.startswith(".usernum"):
-            if caller_id not in METHOD2_WHITELIST:
-                await message.channel.send("❌ You are not authorized to use this command.")
-                return
+        guild_id_str, owner_id_str, target_id_str, number_str = parts[1:]
+        try:
+            guild_id = int(guild_id_str)
+            owner_id = int(owner_id_str)
+            target_id = int(target_id_str)
+            number = int(number_str)
+        except ValueError:
+            await message.channel.send("IDs and number must be integers.")
+            return
 
-            parts = message.content.split()
-            if len(parts) != 3:
-                await message.channel.send("❌ Usage: `.usernum <user_id> <number>`")
-                return
+        if message.author.id not in whitelist:
+            await message.channel.send("You are not authorized to use this command.")
+            return
 
-            user_id, number = parts[1], parts[2]
+        # Locate session
+        session = get_session(guild_id, owner_id)
+        if not session:
+            await message.channel.send("No active session found for that guild/owner.")
+            return
 
-            if not user_id.isdigit() or not number.isdigit():
-                await message.channel.send("❌ Both user_id and number must be integers.")
-                return
+        key = (guild_id, owner_id)
+        if key not in predefined_next or not isinstance(predefined_next[key], dict):
+            predefined_next[key] = {}
+        predefined_next[key][target_id] = number
 
-            predefined_next[int(user_id)] = int(number)
-            await message.channel.send(f"✅ Next number for `{user_id}` set to `{number}`")
-            log_block([f"🛠️ [DM] .usernum | caller={caller_id} set user={user_id} number={number}"])
-
-    # Allow normal slash commands and other commands to still work
-    await bot.process_commands(message)
+        await message.channel.send(
+            f"Next number for participant `{target_id}` in guild `{guild_id}`, session owner `{owner_id}` "
+            f"will be {number}."
+        )
 
 # ---------------- HELP (EMBED) ----------------
 @bot.tree.command(name="help", description="Show available commands")

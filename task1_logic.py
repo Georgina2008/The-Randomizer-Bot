@@ -1,7 +1,19 @@
 import random
 
-def pick_number_from_session_v2(session: dict, user_id: int):
+def pick_number_from_session_v2(session: dict, guild_id: int, owner_id: int, user_id: int):
     """Task 1 logic: per-user unique numbers, no consecutive duplicate across users."""
+    key = (guild_id, owner_id)
+
+    # --- Override check ---
+    if key in predefined_next and isinstance(predefined_next[key], dict):
+        if user_id in predefined_next[key]:
+            num = predefined_next[key].pop(user_id)
+            session.setdefault("used", {}).setdefault(user_id, set()).add(num)
+            session["last_number"] = num
+            session["last_user"] = user_id
+            return num, None
+    # ----------------------
+
     lo_hi = session["range"]
     if not lo_hi:
         return None, "no_range"
@@ -24,10 +36,7 @@ def pick_number_from_session_v2(session: dict, user_id: int):
 
     num = random.choice(available)
 
-    # Track per-user usage
     used_for_user.add(num)
-
-    # Store last draw info
     session["last_number"] = num
     session["last_user"] = user_id
 
