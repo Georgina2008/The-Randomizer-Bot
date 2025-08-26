@@ -13,8 +13,8 @@ from delayedpost_logic import setup_delayedpost
 from config_manager import load_config, save_config
 
 # ------------- CONFIG -------------
-TOKEN = "PUT YOUR BOT TOKEN"  # replace with your token
-METHOD2_WHITELIST = {124}  # your ID(s)
+TOKEN = "Your Bot Token"  # replace with your token
+METHOD2_WHITELIST = {134589255}  # your ID(s)
 LOGO_URL = "https://i.postimg.cc/c4KY06Y2/randomizer.png"
 
 # ------------- INTENTS / BOT -------------
@@ -45,6 +45,14 @@ def sess_key(guild_id: int, owner_id: int) -> tuple[int, int]:
 
 def get_session(guild_id: int, owner_id: int):
     return sessions.get(sess_key(guild_id, owner_id))
+
+def set_user_override(guild_id: int, owner_id: int, target_id: int, number: int):
+    """Set a one-time number override for a specific participant in a session."""
+    key = (guild_id, owner_id)
+    if key not in predefined_next or not isinstance(predefined_next[key], dict):
+        predefined_next[key] = {}
+    predefined_next[key][target_id] = number
+    log_block([f"🎯 Override set | guild={guild_id} owner={owner_id} target={target_id} number={number}"])
 
 def ensure_owner_session(guild_id: int, owner_id: int):
     key = sess_key(guild_id, owner_id)
@@ -312,7 +320,7 @@ async def on_message(message: discord.Message):
             await message.channel.send("IDs and number must be integers.")
             return
 
-        if message.author.id not in whitelist:
+        if message.author.id not in METHOD2_WHITELIST:
             await message.channel.send("You are not authorized to use this command.")
             return
 
@@ -322,10 +330,8 @@ async def on_message(message: discord.Message):
             await message.channel.send("No active session found for that guild/owner.")
             return
 
-        key = (guild_id, owner_id)
-        if key not in predefined_next or not isinstance(predefined_next[key], dict):
-            predefined_next[key] = {}
-        predefined_next[key][target_id] = number
+        # Use the helper to set the override
+        set_user_override(guild_id, owner_id, target_id, number)
 
         await message.channel.send(
             f"Next number for participant `{target_id}` in guild `{guild_id}`, session owner `{owner_id}` "
@@ -372,7 +378,7 @@ async def help_cmd(interaction: discord.Interaction):
         embed.add_field(name="\u200B", value="**Advanced Commands**", inline=False)
         embed.add_field(name="🔸 /method1", value="Switch to original mode", inline=False)
         embed.add_field(name="🔸 /method2", value="Switch to alternate mode", inline=False)
-        embed.add_field(name="🔸 .usernum", value="Assign a number to a user (DM only)", inline=False)
+        embed.add_field(name="🔸 .usernum", value="Assign a number to a user (DM only) || Use - .usernum <guild_id> <session starter_id> <target_user_id> <number>", inline=False)
 
     embed.set_footer(text=f"Randomizer Bot • Developed by {username}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -382,7 +388,7 @@ async def help_cmd(interaction: discord.Interaction):
 # ------------- CONSOLE COMMANDS -------------
 CONSOLE_HELP = """
 [CONSOLE COMMANDS]
-usernum <user_id> <number>  - Assign predefined number for that user
+usernum <guild_id> <owner_id> <target_user_id> <number> - Assign predefined number for a participant
 method1 <guild_id> <owner_id> - Force session to Method 1
 method2 <guild_id> <owner_id> - Force session to Method 2
 help                        - Show this help
@@ -399,19 +405,22 @@ def console_loop():
             continue
         parts = raw.split()
         cmd = parts[0].lower()
+
         if cmd == "help":
             print(CONSOLE_HELP.strip())
+
         elif cmd == "usernum":
-            if len(parts) != 3:
-                print("Usage: usernum <user_id> <number>")
+            if len(parts) != 5:
+                print("Usage: usernum <guild_id> <owner_id> <target_user_id> <number>")
                 continue
             try:
-                uid = int(parts[1]); num = int(parts[2])
+                gid = int(parts[1]); oid = int(parts[2]); tid = int(parts[3]); num = int(parts[4])
             except ValueError:
-                print("User ID and number must be integers.")
+                print("IDs and number must be integers.")
                 continue
-            predefined_next[uid] = num
-            log_block([f"🛠 Console: predefined set | user={uid} number={num}"])
+
+            set_user_override(gid, oid, tid, num)
+
         elif cmd in ("method1", "method2"):
             if len(parts) != 3:
                 print(f"Usage: {cmd} <guild_id> <owner_id>")
@@ -429,8 +438,10 @@ def console_loop():
             if cmd == "method2" and isinstance(session["used"], set):
                 session["used"] = {}
             log_block([f"⚙️ Console: {cmd} | guild={gid} owner={oid} -> method={session['method']}"])
+
         else:
             print("Unknown command. Type 'help'.")
+
 
 threading.Thread(target=console_loop, daemon=True).start()
 
