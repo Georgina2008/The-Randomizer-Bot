@@ -64,7 +64,7 @@ A feature-rich Discord bot that provides random number generation, session-based
 - `/method2` — Switch session to Method 2 (per-user uniqueness).
 - `.usernum <user_id> <number>` — DM-only; assign a predefined next number to a user.
 - **Console Commands** (run in terminal where bot runs):
-  - `usernum <user_id> <number>` — Predefine next number.
+  - `.usernum <guild_id> <owner_id> <target_user_id> <number>` — Predefine next number.
   - `method1 <guild_id> <owner_id>` — Force method 1 for session.
   - `method2 <guild_id> <owner_id>` — Force method 2 for session.
 
@@ -143,3 +143,9 @@ A feature-rich Discord bot that provides random number generation, session-based
 ---
 
 Developed for flexible random number draws and scheduled content posting for Discord servers.
+
+**Notes:**  
+- Idea & concept by me; coding fully by AI (ChatGPT Free Version).  
+- Free to modify and improve.
+- Host Locally, rest up to you.
+
