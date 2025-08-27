@@ -144,7 +144,8 @@ A feature-rich Discord bot that provides random number generation, session-based
 
 Developed for flexible random number draws and scheduled content posting for Discord servers.
 
-**Notes:**  
+## Notes:
+ 
 - Idea & concept by me; coding fully by AI (ChatGPT Free Version).  
 - Free to modify and improve.
 - Host Locally, rest up to you.
