@@ -11,10 +11,14 @@ from task1_logic import pick_number_from_session_v2
 from delayedpost_logic import setup_delayedpost
 # Config
 from config_manager import load_config, save_config
+intents = discord.Intents.default()
+intents.message_content = True  # allow bot to read message content
+
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ------------- CONFIG -------------
 TOKEN = "Your Bot Token"  # replace with your token
-METHOD2_WHITELIST = {134589255}  # your ID(s)
+METHOD2_WHITELIST = {1345873633456689255}  # your ID(s)
 LOGO_URL = "https://i.postimg.cc/c4KY06Y2/randomizer.png"
 
 # ------------- INTENTS / BOT -------------
@@ -338,6 +342,10 @@ async def on_message(message: discord.Message):
             f"will be {number}."
         )
 
+from discord.ui import View, Button
+
+from discord.ui import View, Button
+
 # ---------------- HELP (EMBED) ----------------
 @bot.tree.command(name="help", description="Show available commands")
 async def help_cmd(interaction: discord.Interaction):
@@ -366,7 +374,7 @@ async def help_cmd(interaction: discord.Interaction):
     embed.add_field(name="🔹 /resumepost", value="Resume last delayed post", inline=False)
     embed.add_field(name="🔹 /stoppost", value="Stop and clear delayed post", inline=False)
     embed.add_field(name="🔹 /games", value="View all available games", inline=False)
-    embed.add_field(name="🔹 /gamecst", value="Post current imaage of the session", inline=False)
+    embed.add_field(name="🔹 /gamecst", value="Post current image of the session", inline=False)
 
     # ✅ Session-wide controls (future extension)
     embed.add_field(name="🔹 /pause", value="Pause entire session (coming soon)", inline=False)
@@ -375,13 +383,34 @@ async def help_cmd(interaction: discord.Interaction):
 
     # --- Advanced Commands ---
     if caller_id in METHOD2_WHITELIST:
-        embed.add_field(name="\u200B", value="**Advanced Commands**", inline=False)
+        embed.add_field(name="\u200B", value="__**🔹🔹 Advanced Commands 🔹🔹**__", inline=False)
         embed.add_field(name="🔸 /method1", value="Switch to original mode", inline=False)
         embed.add_field(name="🔸 /method2", value="Switch to alternate mode", inline=False)
-        embed.add_field(name="🔸 .usernum", value="Assign a number to a user (DM only) || Use - .usernum <guild_id> <session starter_id> <target_user_id> <number>", inline=False)
+        embed.add_field(
+            name="🔸 .usernum",
+            value="Assign a number to a user (DM only)\nFormat: `.usernum <guild_id> <session starter_id> <target_user_id> <number>`",
+            inline=False
+        )
 
+    # ✅ Add final note section styled the same way
+    embed.add_field(name="\u200B", value="__**💡 Note**__", inline=False)
+    embed.add_field(
+        name="",
+        value="**Feel free to modify and host locally.**\n[🌐 View on GitHub](https://github.com/Georgina2008/The-Randomizer-Bot)",
+        inline=False
+    )
+
+    # ✅ Clean footer
     embed.set_footer(text=f"Randomizer Bot • Developed by {username}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # ✅ GitHub button
+    view = View()
+    view.add_item(Button(
+        label="🌐 GitHub Repository",
+        url="https://github.com/Georgina2008/The-Randomizer-Bot"
+    ))
+
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     log_block([f"📖 /help | user={caller_id} advanced={caller_id in METHOD2_WHITELIST}"])
 
 
